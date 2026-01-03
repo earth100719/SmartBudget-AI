@@ -58,7 +58,7 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
             <div className="text-sm text-slate-600 space-y-2 bg-emerald-50 p-3 rounded-xl border border-emerald-100">
               <p>1. กดปุ่ม <b>"Export to Google Sheets"</b> ในหน้าสรุปบิล</p>
               <p>2. เปิด Google Sheets ในเบราว์เซอร์</p>
-              <p>3. ไปที่ <b>File > Import > Upload</b> แล้วเลือกไฟล์ .csv ที่โหลดไป</p>
+              <p>3. ไปที่ <b>File &gt; Import &gt; Upload</b> แล้วเลือกไฟล์ .csv ที่โหลดไป</p>
               <p>4. ข้อมูลจะถูกจัดเรียงเป็นตารางให้คุณจัดการต่อได้ทันที!</p>
             </div>
           </section>
