@@ -23,10 +23,10 @@ import {
   Info
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types';
-import { ExpenseItem } from './components/ExpenseItem';
-import { BillReceipt } from './components/BillReceipt';
-import { analyzeBudget } from './services/geminiService';
+import { Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types.ts';
+import { ExpenseItem } from './components/ExpenseItem.tsx';
+import { BillReceipt } from './components/BillReceipt.tsx';
+import { analyzeBudget } from './services/geminiService.ts';
 
 const COLORS = [
   '#3b82f6', '#f97316', '#64748b', '#eab308', 
@@ -37,8 +37,8 @@ const COLORS = [
 const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white">
           <h3 className="font-bold text-lg flex items-center gap-2"><Info className="w-5 h-5" /> คู่มือการใช้งาน</h3>
           <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6" /></button>
@@ -59,10 +59,6 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
               <p>3. ไปที่ <b>File > Import > Upload</b> แล้วเลือกไฟล์ .csv ที่โหลดไป</p>
               <p>4. ข้อมูลจะถูกจัดเรียงเป็นตารางให้คุณจัดการต่อได้ทันที!</p>
             </div>
-          </section>
-          <section>
-            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-2"><Save className="w-4 h-4 text-amber-500" /> ข้อมูลปลอดภัยแค่ไหน?</h4>
-            <p className="text-sm text-slate-600">ข้อมูลของคุณถูกเก็บไว้ใน <b>LocalStorage</b> ของเบราว์เซอร์เครื่องนี้เท่านั้น ไม่มีการส่งขึ้น Server ภายนอก (ยกเว้นส่งให้ AI วิเคราะห์) มั่นใจได้เรื่องความเป็นส่วนตัวครับ</p>
           </section>
         </div>
         <div className="p-4 bg-slate-50 text-center">
@@ -85,7 +81,7 @@ const IosPrompt = () => {
   }, []);
   if (!show) return null;
   return (
-    <div className="fixed bottom-24 left-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-10 no-print">
+    <div className="fixed bottom-24 left-4 right-4 z-50 no-print">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 flex items-center space-x-4">
         <div className="p-3 bg-indigo-600 rounded-xl text-white"><Share className="w-6 h-6" /></div>
         <div className="flex-1">
@@ -108,25 +104,21 @@ export default function App() {
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // Form states
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<ExpenseCategory>(ExpenseCategory.FOOD);
 
-  // Persist current data
   useEffect(() => {
     localStorage.setItem('current_salary', salary.toString());
     localStorage.setItem('current_expenses', JSON.stringify(expenses));
   }, [salary, expenses]);
 
-  // Persist history
   useEffect(() => {
     localStorage.setItem('budget_history', JSON.stringify(history));
   }, [history]);
 
   const totalExpenses = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
   const balance = salary - totalExpenses;
-  const expensePercentage = salary > 0 ? (totalExpenses / salary) * 100 : 0;
 
   const chartData = useMemo(() => {
     const data: Record<string, number> = {};
@@ -187,8 +179,6 @@ export default function App() {
   const exportToCSV = (data: BudgetState, fileName: string) => {
     const headers = ['วันที่', 'หมวดหมู่', 'รายละเอียด', 'จำนวนเงิน (บาท)'];
     const rows = data.expenses.map(e => [e.date, e.category, e.description, e.amount.toString()]);
-    
-    // Add Summary Rows
     rows.push(['', '', '', '']);
     rows.push(['', '', 'รายได้ทั้งหมด', data.salary.toString()]);
     rows.push(['', '', 'ค่าใช้จ่ายทั้งหมด', data.expenses.reduce((sum, e) => sum + e.amount, 0).toString()]);
@@ -207,7 +197,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 safe-top">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       <IosPrompt />
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
       
@@ -219,29 +209,17 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-2">
             <div className="flex items-center bg-slate-100 p-1 rounded-full text-xs font-bold mr-2">
-              <button 
-                onClick={() => {setActiveTab('dashboard'); setSelectedHistory(null)}} 
-                className={`px-4 py-2 rounded-full transition-all ${activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-              >
-                แดชบอร์ด
-              </button>
-              <button 
-                onClick={() => {setActiveTab('history'); setSelectedHistory(null)}} 
-                className={`px-4 py-2 rounded-full transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
-              >
-                ประวัติ
-              </button>
+              <button onClick={() => {setActiveTab('dashboard'); setSelectedHistory(null)}} className={`px-4 py-2 rounded-full transition-all ${activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>แดชบอร์ด</button>
+              <button onClick={() => {setActiveTab('history'); setSelectedHistory(null)}} className={`px-4 py-2 rounded-full transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>ประวัติ</button>
             </div>
-            <button onClick={() => setIsHelpOpen(true)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-              <HelpCircle className="w-6 h-6" />
-            </button>
+            <button onClick={() => setIsHelpOpen(true)} className="p-2 text-slate-400 hover:text-indigo-600"><HelpCircle className="w-6 h-6" /></button>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <label className="block text-sm font-medium text-slate-500 mb-2">รายได้ต่อเดือน</label>
@@ -265,11 +243,7 @@ export default function App() {
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl shadow-xl text-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Sparkles className="w-20 h-20" /></div>
-                <h3 className="flex items-center space-x-2 font-bold mb-4">
-                  <Sparkles className="w-5 h-5 text-yellow-400" />
-                  <span>AI Analyst</span>
-                </h3>
+                <h3 className="flex items-center space-x-2 font-bold mb-4"><Sparkles className="w-5 h-5 text-yellow-400" /><span>AI Analyst</span></h3>
                 {aiAnalysis ? (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-300 italic border-l-2 border-indigo-500 pl-4">"{aiAnalysis.summary}"</p>
@@ -281,23 +255,14 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                <button onClick={() => setActiveTab('bill')} className="w-full flex items-center justify-center space-x-2 py-4 bg-slate-800 text-white rounded-2xl font-bold hover:bg-slate-700 transition-all">
-                  <Receipt className="w-5 h-5" />
-                  <span>สรุปบิลรายเดือน</span>
-                </button>
-                <button onClick={saveToHistory} className="w-full flex items-center justify-center space-x-2 py-4 border-2 border-indigo-100 text-indigo-600 rounded-2xl font-bold hover:bg-indigo-50 transition-all">
-                  <Save className="w-5 h-5" />
-                  <span>บันทึกลงประวัติ</span>
-                </button>
+                <button onClick={() => setActiveTab('bill')} className="w-full flex items-center justify-center space-x-2 py-4 bg-slate-800 text-white rounded-2xl font-bold hover:bg-slate-700 transition-all"><Receipt className="w-5 h-5" /><span>สรุปบิลรายเดือน</span></button>
+                <button onClick={saveToHistory} className="w-full flex items-center justify-center space-x-2 py-4 border-2 border-indigo-100 text-indigo-600 rounded-2xl font-bold hover:bg-indigo-50 transition-all"><Save className="w-5 h-5" /><span>บันทึกลงประวัติ</span></button>
               </div>
             </div>
 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="font-bold text-slate-800 mb-6 flex items-center space-x-2">
-                  <div className="w-2 h-6 bg-indigo-600 rounded-full"></div>
-                  <span>เพิ่มรายการ</span>
-                </h3>
+                <h3 className="font-bold text-slate-800 mb-6 flex items-center space-x-2"><div className="w-2 h-6 bg-indigo-600 rounded-full"></div><span>เพิ่มรายการ</span></h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">หมวดหมู่</label>
@@ -316,22 +281,6 @@ export default function App() {
                 </div>
               </div>
 
-              {expenses.length > 0 && (
-                <div className="bg-white p-4 rounded-2xl border border-slate-100">
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                          {chartData.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip formatter={(val: number) => `฿${val.toLocaleString()}`} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-3">
                 {expenses.length === 0 ? (
                   <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-100">
@@ -347,79 +296,36 @@ export default function App() {
         )}
 
         {activeTab === 'bill' && (
-          <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-            <div className="text-center no-print">
-              <h2 className="text-2xl font-bold mb-2 text-slate-800">ยืนยันสรุปงบประมาณ</h2>
-              <p className="text-sm text-slate-500">ตรวจสอบความถูกต้องและส่งออกข้อมูลเพื่อนำไปใช้ต่อ</p>
-            </div>
+          <div className="space-y-8">
             <BillReceipt state={{ salary, expenses }} />
             <div className="flex flex-wrap justify-center gap-4 no-print pb-10">
               <button onClick={() => setActiveTab('dashboard')} className="px-6 py-3 border border-slate-200 rounded-xl font-bold hover:bg-slate-100">ย้อนกลับ</button>
-              <button 
-                onClick={() => exportToCSV({salary, expenses}, `Budget_${new Date().toLocaleDateString('th-TH')}`)}
-                className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/20"
-              >
-                <FileSpreadsheet className="w-5 h-5" />
-                <span>Export to Google Sheets (CSV)</span>
-              </button>
-              <button onClick={() => window.print()} className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20">
-                <Download className="w-5 h-5" />
-                <span>พิมพ์ใบสรุป (PDF)</span>
-              </button>
+              <button onClick={() => exportToCSV({salary, expenses}, `Budget_${new Date().toLocaleDateString('th-TH')}`)} className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/20"><FileSpreadsheet className="w-5 h-5" /><span>Export to Google Sheets (CSV)</span></button>
+              <button onClick={() => window.print()} className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"><Download className="w-5 h-5" /><span>พิมพ์ใบสรุป (PDF)</span></button>
             </div>
           </div>
         )}
 
         {activeTab === 'history' && (
-          <div className="animate-in fade-in duration-500 space-y-6">
-            <h2 className="text-2xl font-bold text-slate-800 flex items-center space-x-2">
-              <HistoryIcon className="w-6 h-6 text-indigo-600" />
-              <span>ประวัติการเงินของคุณ</span>
-            </h2>
-
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center space-x-2"><HistoryIcon className="w-6 h-6 text-indigo-600" /><span>ประวัติการเงินของคุณ</span></h2>
             {selectedHistory ? (
               <div className="space-y-6">
-                <button onClick={() => setSelectedHistory(null)} className="flex items-center space-x-2 text-indigo-600 font-bold mb-4">
-                  <ArrowRight className="w-4 h-4 rotate-180" />
-                  <span>กลับไปยังรายการประวัติ</span>
-                </button>
+                <button onClick={() => setSelectedHistory(null)} className="flex items-center space-x-2 text-indigo-600 font-bold mb-4"><ArrowRight className="w-4 h-4 rotate-180" /><span>กลับไปยังรายการประวัติ</span></button>
                 <BillReceipt state={{ salary: selectedHistory.salary, expenses: selectedHistory.expenses }} />
-                <div className="flex justify-center no-print gap-4">
-                  <button onClick={() => exportToCSV(selectedHistory, `Budget_History_${selectedHistory.monthName}`)} className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20">
-                    <FileSpreadsheet className="w-5 h-5" />
-                    <span>Export to Google Sheets</span>
-                  </button>
-                  <button onClick={() => window.print()} className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20">
-                    <Download className="w-5 h-5" />
-                    <span>พิมพ์บิลนี้</span>
-                  </button>
-                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {history.length === 0 ? (
-                  <div className="col-span-full py-20 text-center bg-white rounded-3xl border-2 border-dashed border-slate-100">
-                    <p className="text-slate-400 font-medium italic">ยังไม่มีการบันทึกประวัติ</p>
-                  </div>
+                  <div className="col-span-full py-20 text-center bg-white rounded-3xl border-2 border-dashed border-slate-100"><p className="text-slate-400 font-medium italic">ยังไม่มีการบันทึกประวัติ</p></div>
                 ) : (
                   history.map(h => (
                     <div key={h.id} onClick={() => setSelectedHistory(h)} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer group relative overflow-hidden">
                       <div className="flex items-center space-x-4 mb-4">
-                        <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                          <Table className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-800">{h.monthName}</h4>
-                          <p className="text-[10px] text-slate-400 uppercase tracking-widest">{new Date(h.savedAt).toLocaleDateString('th-TH')}</p>
-                        </div>
+                        <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Table className="w-6 h-6" /></div>
+                        <div><h4 className="font-bold text-slate-800">{h.monthName}</h4><p className="text-[10px] text-slate-400 uppercase tracking-widest">{new Date(h.savedAt).toLocaleDateString('th-TH')}</p></div>
                       </div>
-                      <div className="space-y-2 border-t border-slate-50 pt-4">
-                        <div className="flex justify-between text-xs text-slate-500"><span>คงเหลือ:</span><span className="font-bold text-slate-900">฿{(h.salary - h.expenses.reduce((s, e) => s + e.amount, 0)).toLocaleString()}</span></div>
-                        <div className="flex justify-between text-xs text-slate-500"><span>รายการ:</span><span className="font-bold">{h.expenses.length} รายการ</span></div>
-                      </div>
-                      <button onClick={(e) => deleteHistory(h.id, e)} className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <button onClick={(e) => deleteHistory(h.id, e)} className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))
                 )}

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Expense, ExpenseCategory } from '../types';
+import { Expense, ExpenseCategory } from '../types.ts';
 import { 
   Trash2, Plane, Home, Utensils, Car, Zap, Tv, 
   ShoppingBag, HeartPulse, PiggyBank, MoreHorizontal, 
