@@ -1,0 +1,8 @@
+{
+  "name": "SmartBudget AI",
+  "short_name": "SmartBudget",
+  "description": "แอปจัดการงบประมาณรายเดือนและวิเคราะห์การเงินด้วย AI พร้อมระบบออกบิล PDF และส่งออก Google Sheets",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
