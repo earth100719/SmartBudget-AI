@@ -20,13 +20,15 @@ import {
   FileSpreadsheet,
   HelpCircle,
   Smartphone,
-  Info
+  Info,
+  QrCode
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types.ts';
 import { ExpenseItem } from './components/ExpenseItem.tsx';
 import { BillReceipt } from './components/BillReceipt.tsx';
 import { analyzeBudget } from './services/geminiService.ts';
+import { QRCodeModal } from './components/QRCodeModal.tsx';
 
 const COLORS = [
   '#3b82f6', '#f97316', '#64748b', '#eab308', 
@@ -59,6 +61,10 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
               <p>3. ไปที่ <b>File > Import > Upload</b> แล้วเลือกไฟล์ .csv ที่โหลดไป</p>
               <p>4. ข้อมูลจะถูกจัดเรียงเป็นตารางให้คุณจัดการต่อได้ทันที!</p>
             </div>
+          </section>
+          <section>
+            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-2"><QrCode className="w-4 h-4 text-orange-500" /> ระบบสร้าง QR รับเงิน</h4>
+            <p className="text-sm text-slate-600">คุณสามารถสร้าง QR Code สำหรับ PromptPay ได้จากหน้าสรุปบิล โดยแอปจะดึงยอดเงินคงเหลือมาสร้าง QR ให้ทันที เหมาะสำหรับการส่งบิลเรียกเก็บเงิน</p>
           </section>
         </div>
         <div className="p-4 bg-slate-50 text-center">
@@ -103,6 +109,7 @@ export default function App() {
   const [loadingAI, setLoadingAI] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState<string>('');
@@ -119,14 +126,6 @@ export default function App() {
 
   const totalExpenses = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
   const balance = salary - totalExpenses;
-
-  const chartData = useMemo(() => {
-    const data: Record<string, number> = {};
-    expenses.forEach(e => {
-      data[e.category] = (data[e.category] || 0) + e.amount;
-    });
-    return Object.entries(data).map(([name, value]) => ({ name, value }));
-  }, [expenses]);
 
   const addExpense = () => {
     if (!amount || parseFloat(amount) <= 0) return;
@@ -200,6 +199,11 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       <IosPrompt />
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+      <QRCodeModal 
+        isOpen={isQRModalOpen} 
+        onClose={() => setIsQRModalOpen(false)} 
+        amount={activeTab === 'bill' ? balance : 0} 
+      />
       
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 no-print shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -300,7 +304,8 @@ export default function App() {
             <BillReceipt state={{ salary, expenses }} />
             <div className="flex flex-wrap justify-center gap-4 no-print pb-10">
               <button onClick={() => setActiveTab('dashboard')} className="px-6 py-3 border border-slate-200 rounded-xl font-bold hover:bg-slate-100">ย้อนกลับ</button>
-              <button onClick={() => exportToCSV({salary, expenses}, `Budget_${new Date().toLocaleDateString('th-TH')}`)} className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/20"><FileSpreadsheet className="w-5 h-5" /><span>Export to Google Sheets (CSV)</span></button>
+              <button onClick={() => setIsQRModalOpen(true)} className="flex items-center space-x-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 shadow-lg shadow-orange-500/20"><QrCode className="w-5 h-5" /><span>สร้าง QR รับเงิน (PromptPay)</span></button>
+              <button onClick={() => exportToCSV({salary, expenses}, `Budget_${new Date().toLocaleDateString('th-TH')}`)} className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/20"><FileSpreadsheet className="w-5 h-5" /><span>Export to Google Sheets</span></button>
               <button onClick={() => window.print()} className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"><Download className="w-5 h-5" /><span>พิมพ์ใบสรุป (PDF)</span></button>
             </div>
           </div>
