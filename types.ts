@@ -20,6 +20,7 @@ export interface User {
   username: string;
   fullName: string;
   createdAt: string;
+  role?: 'admin' | 'user';
 }
 
 export interface Expense {
