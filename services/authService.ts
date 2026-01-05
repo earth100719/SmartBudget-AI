@@ -1,60 +1,58 @@
 
+import { supabase } from './supabaseClient.ts';
 import { User } from '../types.ts';
 
-const USERS_KEY = 'sb_users_db';
-const SESSION_KEY = 'sb_current_session';
-
 export const authService = {
-  // สมัครสมาชิก
-  register: async (username: string, fullName: string, password: string): Promise<User> => {
-    // จำลอง Network Delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const users: any[] = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    
-    if (users.find(u => u.username === username)) {
-      throw new Error('ชื่อผู้ใช้นี้ถูกใช้ไปแล้ว');
-    }
+  register: async (email: string, fullName: string, password: string): Promise<User> => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName }
+      }
+    });
 
-    const newUser: any = {
-      id: Math.random().toString(36).substr(2, 9),
-      username,
-      fullName,
-      password, // ในระบบจริงต้อง Hash รหัสผ่าน
-      createdAt: new Date().toISOString()
+    if (error) throw error;
+    if (!data.user) throw new Error('การสมัครสมาชิกไม่สำเร็จ');
+
+    return {
+      id: data.user.id,
+      username: email.split('@')[0],
+      fullName: fullName,
+      createdAt: data.user.created_at
     };
-
-    users.push(newUser);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    
-    const { password: _, ...userWithoutPassword } = newUser;
-    return userWithoutPassword as User;
   },
 
-  // เข้าสู่ระบบ
-  login: async (username: string, password: string): Promise<User> => {
-    await new Promise(resolve => setTimeout(resolve, 600));
-    
-    const users: any[] = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    const user = users.find(u => u.username === username && u.password === password);
+  login: async (email: string, password: string): Promise<User> => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    if (!user) {
-      throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    }
+    if (error) throw error;
+    if (!data.user) throw new Error('ไม่พบข้อมูลผู้ใช้');
 
-    const { password: _, ...userWithoutPassword } = user;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(userWithoutPassword));
-    return userWithoutPassword as User;
+    return {
+      id: data.user.id,
+      username: email.split('@')[0],
+      fullName: data.user.user_metadata.full_name || email,
+      createdAt: data.user.created_at
+    };
   },
 
-  // ออกจากระบบ
-  logout: () => {
-    localStorage.removeItem(SESSION_KEY);
+  logout: async () => {
+    await supabase.auth.signOut();
   },
 
-  // ดึงข้อมูลผู้ใช้ปัจจุบัน
-  getCurrentUser: (): User | null => {
-    const session = localStorage.getItem(SESSION_KEY);
-    return session ? JSON.parse(session) : null;
+  getCurrentUser: async (): Promise<User | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      username: user.email?.split('@')[0] || '',
+      fullName: user.user_metadata.full_name || '',
+      createdAt: user.created_at
+    };
   }
 };
