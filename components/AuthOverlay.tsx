@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { User, LogIn, UserPlus, Lock, User as UserIcon, Loader2, Sparkles, Wallet } from 'lucide-react';
+import { LogIn, UserPlus, Lock, User as UserIcon, Loader2, Wallet, Mail, AlertCircle, ExternalLink, ShieldAlert } from 'lucide-react';
 import { authService } from '../services/authService.ts';
+import { supabase } from '../services/supabaseClient.ts';
 
 interface Props {
   onLoginSuccess: (user: any) => void;
@@ -12,114 +13,173 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
+  // ตรวจสอบว่า Key ที่ใช้อยู่ใช่ของ Stripe หรือไม่
+  const isStripeKey = (supabase as any).supabaseKey?.startsWith('sb_');
+
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
     fullName: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isStripeKey) {
+      setError('หยุดก่อน! คุณกำลังใช้ Stripe Key แทนที่จะเป็น Supabase Key');
+      return;
+    }
+    
     setError('');
     setLoading(true);
 
     try {
       if (isLogin) {
-        const user = await authService.login(formData.username, formData.password);
+        const user = await authService.login(formData.email, formData.password);
         onLoginSuccess(user);
       } else {
         if (!formData.fullName) throw new Error('กรุณากรอกชื่อ-นามสกุล');
-        const user = await authService.register(formData.username, formData.fullName, formData.password);
-        // หลังจากสมัครสมาชิก ให้เข้าสู่ระบบใหม่อีกครั้ง หรือ Auto Login
-        const loggedInUser = await authService.login(formData.username, formData.password);
-        onLoginSuccess(loggedInUser);
+        
+        await authService.register(formData.email, formData.fullName, formData.password);
+        
+        try {
+          const loggedInUser = await authService.login(formData.email, formData.password);
+          onLoginSuccess(loggedInUser);
+        } catch (loginErr: any) {
+          if (loginErr.message.includes('not confirmed')) {
+            throw new Error('กรุณาปิด "Confirm email" ในหน้า Supabase > Auth > Sign In / Providers');
+          }
+          throw loginErr;
+        }
       }
     } catch (err: any) {
-      setError(err.message);
+      let msg = err.message;
+      if (msg.includes('apiKey') || msg.includes('JWT') || msg.includes('401')) {
+        msg = 'API Key ไม่ถูกต้อง กรุณาใช้ Anon Key จาก Supabase (eyJ...)';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 px-4">
-      {/* Background Decor */}
-      <div className="absolute inset-0 overflow-hidden opacity-20 pointer-events-none">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-indigo-600 rounded-full blur-[120px]"></div>
-        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-purple-600 rounded-full blur-[120px]"></div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950 px-4">
+      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,#4f46e5_0%,transparent_50%)]"></div>
       </div>
 
-      <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative z-10 border border-slate-100">
-        <div className="p-8 pt-10 text-center">
-          <div className="inline-flex p-4 bg-indigo-600 rounded-3xl text-white mb-6 shadow-xl shadow-indigo-200">
-            <Wallet className="w-10 h-10" />
+      <div className="w-full max-w-md relative z-10">
+        {/* Stripe Warning Banner */}
+        {isStripeKey && (
+          <div className="mb-6 p-6 bg-red-600 text-white rounded-[2rem] shadow-2xl animate-bounce-subtle border-4 border-white/20">
+            <div className="flex items-center gap-3 mb-2">
+              <ShieldAlert className="w-8 h-8" />
+              <h3 className="font-black text-xl italic uppercase tracking-tighter">ตรวจพบข้อผิดพลาด!</h3>
+            </div>
+            <p className="text-sm font-bold leading-relaxed opacity-90">
+              คุณก๊อปปี้รหัสมาจาก <span className="underline decoration-2">Stripe.com</span> ครับ (รหัสที่ขึ้นต้นด้วย <code className="bg-red-700 px-1">sb_</code>)<br/><br/>
+              ต้องใช้รหัสจาก <span className="underline decoration-2 text-yellow-300">Supabase.com</span> (ที่ขึ้นต้นด้วย <code className="bg-red-700 px-1 text-yellow-300">eyJ...</code>) เท่านั้นถึงจะใช้งานแอปนี้ได้
+            </p>
+            <a 
+              href="https://app.supabase.com" 
+              target="_blank" 
+              className="mt-4 flex items-center justify-center gap-2 py-3 bg-white text-red-600 rounded-xl font-black text-xs uppercase transition-transform hover:scale-105"
+            >
+              ไปที่ Supabase Dashboard <ExternalLink className="w-4 h-4" />
+            </a>
           </div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight mb-2">SmartBudget AI</h2>
-          <p className="text-slate-400 text-sm font-medium italic">ผู้ช่วยวิเคราะห์การเงินส่วนตัวของคุณ</p>
-        </div>
+        )}
 
-        <div className="px-8 pb-10">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="relative">
-                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        <div className="bg-white/95 backdrop-blur-xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20">
+          <div className="p-8 pt-12 text-center">
+            <div className="inline-flex p-5 bg-indigo-600 rounded-[2rem] text-white mb-6 shadow-xl shadow-indigo-200">
+              <Wallet className="w-10 h-10" />
+            </div>
+            <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">SmartBudget</h2>
+            <p className="text-slate-500 text-sm font-medium tracking-wide">จัดการเงินง่ายๆ ด้วย AI อัจฉริยะ</p>
+          </div>
+
+          <div className="px-8 pb-12">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <div className="group relative">
+                  <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
+                  <input 
+                    type="text" 
+                    placeholder="ชื่อ-นามสกุล"
+                    className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                    value={formData.fullName}
+                    onChange={e => setFormData({...formData, fullName: e.target.value})}
+                    required
+                  />
+                </div>
+              )}
+              
+              <div className="group relative">
+                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
                 <input 
-                  type="text" 
-                  placeholder="ชื่อ-นามสกุล"
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
-                  value={formData.fullName}
-                  onChange={e => setFormData({...formData, fullName: e.target.value})}
+                  type="email" 
+                  placeholder="อีเมล (Email)"
+                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  value={formData.email}
+                  onChange={e => setFormData({...formData, email: e.target.value})}
                   required
                 />
               </div>
-            )}
-            
-            <div className="relative">
-              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="ชื่อผู้ใช้ (Username)"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
-                value={formData.username}
-                onChange={e => setFormData({...formData, username: e.target.value})}
-                required
-              />
+
+              <div className="group relative">
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
+                <input 
+                  type="password" 
+                  placeholder="รหัสผ่าน"
+                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
+                  value={formData.password}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-2 text-red-600 text-xs font-bold bg-red-50 p-4 rounded-2xl border border-red-100 animate-shake">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                disabled={loading || isStripeKey}
+                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (isLogin ? <LogIn className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />)}
+                {isLogin ? 'เข้าสู่ระบบ' : 'เริ่มใช้งานฟรี'}
+              </button>
+            </form>
+
+            <div className="mt-10 text-center">
+              <button 
+                onClick={() => setIsLogin(!isLogin)} 
+                className="text-sm font-black text-indigo-600 hover:text-indigo-800 underline underline-offset-8"
+              >
+                {isLogin ? 'ยังไม่มีบัญชี? สมัครสมาชิกที่นี่' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
+              </button>
             </div>
-
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input 
-                type="password" 
-                placeholder="รหัสผ่าน"
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium transition-all"
-                value={formData.password}
-                onChange={e => setFormData({...formData, password: e.target.value})}
-                required
-              />
-            </div>
-
-            {error && <p className="text-red-500 text-xs font-bold text-center bg-red-50 py-2 rounded-lg">{error}</p>}
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 disabled:opacity-70"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isLogin ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />)}
-              {isLogin ? 'เข้าสู่ระบบ' : 'สร้างบัญชีผู้ใช้'}
-            </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)} 
-              className="text-sm font-bold text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
-            >
-              {isLogin ? 'ยังไม่มีบัญชี? สมัครสมาชิกที่นี่' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
-            </button>
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        .animate-bounce-subtle { animation: bounce-subtle 3s ease-in-out infinite; }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+      `}</style>
     </div>
   );
 };
