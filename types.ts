@@ -15,8 +15,16 @@ export enum ExpenseCategory {
   OTHERS = 'อื่นๆ'
 }
 
+export interface User {
+  id: string;
+  username: string;
+  fullName: string;
+  createdAt: string;
+}
+
 export interface Expense {
   id: string;
+  userId: string;
   category: ExpenseCategory;
   amount: number;
   description: string;
@@ -28,8 +36,11 @@ export interface BudgetState {
   expenses: Expense[];
 }
 
-export interface HistoricalBudget extends BudgetState {
+export interface HistoricalBudget {
   id: string;
+  userId: string;
+  salary: number;
+  expenses: Expense[];
   savedAt: string;
   monthName: string;
 }
