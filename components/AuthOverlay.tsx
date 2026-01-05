@@ -13,9 +13,8 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // ตรวจสอบความถูกต้องของ Key แบบปลอดภัย
-  const supabaseKey = (supabase as any)?.supabaseKey || '';
-  const isStripeKey = typeof supabaseKey === 'string' && supabaseKey.startsWith('sb_');
+  // ตรวจสอบว่า Key ที่ใช้อยู่ใช่ของ Stripe หรือไม่
+  const isStripeKey = (supabase as any).supabaseKey?.startsWith('sb_');
 
   const [formData, setFormData] = useState({
     email: '',
@@ -26,7 +25,7 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isStripeKey) {
-      setError('ตรวจพบข้อผิดพลาด: คุณกำลังใช้ Stripe Key แทนที่จะเป็น Supabase Key');
+      setError('หยุดก่อน! คุณกำลังใช้ Stripe Key แทนที่จะเป็น Supabase Key');
       return;
     }
     
@@ -42,21 +41,20 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
         
         await authService.register(formData.email, formData.fullName, formData.password);
         
-        // หลังจากสมัคร ให้ลองล็อกอินทันที
         try {
           const loggedInUser = await authService.login(formData.email, formData.password);
           onLoginSuccess(loggedInUser);
         } catch (loginErr: any) {
-          if (loginErr.message?.includes('not confirmed')) {
-            throw new Error('ระบบสมัครสำเร็จ แต่คุณต้องยืนยันอีเมลก่อน (หรือปิดการยืนยันใน Supabase Auth Settings)');
+          if (loginErr.message.includes('not confirmed')) {
+            throw new Error('กรุณาปิด "Confirm email" ในหน้า Supabase > Auth > Sign In / Providers');
           }
           throw loginErr;
         }
       }
     } catch (err: any) {
-      let msg = err.message || 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ';
+      let msg = err.message;
       if (msg.includes('apiKey') || msg.includes('JWT') || msg.includes('401')) {
-        msg = 'API Key ของ Supabase ไม่ถูกต้อง โปรดตรวจสอบ anon key ในไฟล์ supabaseClient.ts';
+        msg = 'API Key ไม่ถูกต้อง กรุณาใช้ Anon Key จาก Supabase (eyJ...)';
       }
       setError(msg);
     } finally {
@@ -70,45 +68,46 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,#4f46e5_0%,transparent_50%)]"></div>
       </div>
 
-      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      <div className="w-full max-w-md relative z-10">
+        {/* Stripe Warning Banner */}
         {isStripeKey && (
-          <div className="mb-6 p-6 bg-red-600 text-white rounded-[2.5rem] shadow-2xl border-4 border-white/20">
+          <div className="mb-6 p-6 bg-red-600 text-white rounded-[2rem] shadow-2xl animate-bounce-subtle border-4 border-white/20">
             <div className="flex items-center gap-3 mb-2">
               <ShieldAlert className="w-8 h-8" />
-              <h3 className="font-black text-xl italic uppercase tracking-tighter">API KEY ERROR!</h3>
+              <h3 className="font-black text-xl italic uppercase tracking-tighter">ตรวจพบข้อผิดพลาด!</h3>
             </div>
             <p className="text-sm font-bold leading-relaxed opacity-90">
-              คุณกำลังใช้รหัสจาก <span className="underline">Stripe.com</span> ครับ<br/>
-              ต้องใช้ <span className="text-yellow-300">Anon Key</span> จาก <span className="underline">Supabase.com</span> เท่านั้น (รหัสที่ขึ้นต้นด้วย <code className="bg-red-700 px-1 text-yellow-200">eyJ...</code>)
+              คุณก๊อปปี้รหัสมาจาก <span className="underline decoration-2">Stripe.com</span> ครับ (รหัสที่ขึ้นต้นด้วย <code className="bg-red-700 px-1">sb_</code>)<br/><br/>
+              ต้องใช้รหัสจาก <span className="underline decoration-2 text-yellow-300">Supabase.com</span> (ที่ขึ้นต้นด้วย <code className="bg-red-700 px-1 text-yellow-300">eyJ...</code>) เท่านั้นถึงจะใช้งานแอปนี้ได้
             </p>
             <a 
               href="https://app.supabase.com" 
               target="_blank" 
               className="mt-4 flex items-center justify-center gap-2 py-3 bg-white text-red-600 rounded-xl font-black text-xs uppercase transition-transform hover:scale-105"
             >
-              เปิด Supabase Dashboard <ExternalLink className="w-4 h-4" />
+              ไปที่ Supabase Dashboard <ExternalLink className="w-4 h-4" />
             </a>
           </div>
         )}
 
         <div className="bg-white/95 backdrop-blur-xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20">
           <div className="p-8 pt-12 text-center">
-            <div className="inline-flex p-5 bg-indigo-600 rounded-[2.2rem] text-white mb-6 shadow-xl shadow-indigo-200">
+            <div className="inline-flex p-5 bg-indigo-600 rounded-[2rem] text-white mb-6 shadow-xl shadow-indigo-200">
               <Wallet className="w-10 h-10" />
             </div>
             <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">SmartBudget</h2>
-            <p className="text-slate-500 text-sm font-bold uppercase tracking-widest opacity-60">AI Financial Assistant</p>
+            <p className="text-slate-500 text-sm font-medium tracking-wide">จัดการเงินง่ายๆ ด้วย AI อัจฉริยะ</p>
           </div>
 
           <div className="px-8 pb-12">
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
                 <div className="group relative">
-                  <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
                   <input 
                     type="text" 
-                    placeholder="ชื่อ-นามสกุล ของคุณ"
-                    className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-all"
+                    placeholder="ชื่อ-นามสกุล"
+                    className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
                     value={formData.fullName}
                     onChange={e => setFormData({...formData, fullName: e.target.value})}
                     required
@@ -117,11 +116,11 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
               )}
               
               <div className="group relative">
-                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
                 <input 
                   type="email" 
                   placeholder="อีเมล (Email)"
-                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
                   required
@@ -129,11 +128,11 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
               </div>
 
               <div className="group relative">
-                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500" />
                 <input 
                   type="password" 
-                  placeholder="รหัสผ่าน (Password)"
-                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-all"
+                  placeholder="รหัสผ่าน"
+                  className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold"
                   value={formData.password}
                   onChange={e => setFormData({...formData, password: e.target.value})}
                   required
@@ -141,34 +140,39 @@ export const AuthOverlay: React.FC<Props> = ({ onLoginSuccess }) => {
               </div>
 
               {error && (
-                <div className="flex items-start gap-3 text-red-600 text-xs font-bold bg-red-50 p-4 rounded-2xl border border-red-100 animate-shake">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <span className="leading-tight">{error}</span>
+                <div className="flex items-start gap-2 text-red-600 text-xs font-bold bg-red-50 p-4 rounded-2xl border border-red-100 animate-shake">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
 
               <button 
                 type="submit" 
                 disabled={loading || isStripeKey}
-                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl disabled:opacity-50 active:scale-95"
+                className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-2xl disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (isLogin ? <LogIn className="w-6 h-6" /> : <UserPlus className="w-6 h-6" />)}
-                {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกฟรี'}
+                {isLogin ? 'เข้าสู่ระบบ' : 'เริ่มใช้งานฟรี'}
               </button>
             </form>
 
             <div className="mt-10 text-center">
               <button 
                 onClick={() => setIsLogin(!isLogin)} 
-                className="text-sm font-black text-indigo-600 hover:text-indigo-800 underline underline-offset-8 decoration-2"
+                className="text-sm font-black text-indigo-600 hover:text-indigo-800 underline underline-offset-8"
               >
-                {isLogin ? 'ยังไม่มีบัญชีใช่ไหม? สมัครที่นี่' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
+                {isLogin ? 'ยังไม่มีบัญชี? สมัครสมาชิกที่นี่' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
               </button>
             </div>
           </div>
         </div>
       </div>
       <style>{`
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        .animate-bounce-subtle { animation: bounce-subtle 3s ease-in-out infinite; }
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
           25% { transform: translateX(-4px); }
