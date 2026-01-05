@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, Wallet, Receipt, TrendingDown, TrendingUp, Download, Sparkles, ArrowRight, Share, X, 
   History as HistoryIcon, Table, Trash2, Save, FileSpreadsheet, HelpCircle, Smartphone, Info, 
-  QrCode, LogOut, User as UserIcon
+  QrCode, LogOut, User as UserIcon, Cloud, CloudUpload, ExternalLink, Loader2
 } from 'lucide-react';
 import { User, Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types.ts';
 import { ExpenseItem } from './components/ExpenseItem.tsx';
@@ -12,6 +12,7 @@ import { analyzeBudget } from './services/geminiService.ts';
 import { QRCodeModal } from './components/QRCodeModal.tsx';
 import { AuthOverlay } from './components/AuthOverlay.tsx';
 import { authService } from './services/authService.ts';
+import { googleApiService } from './services/googleApiService.ts';
 
 const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   if (!isOpen) return null;
@@ -31,12 +32,10 @@ const HelpModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }
             </div>
           </section>
           <section>
-            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-2"><FileSpreadsheet className="w-4 h-4 text-emerald-500" /> วิธีใช้กับ Google Sheets</h4>
-            <div className="text-sm text-slate-600 space-y-2 bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-              <p>1. กดปุ่ม <b>"Export to Google Sheets"</b> ในหน้าสรุปบิล</p>
-              <p>2. เปิด Google Sheets ในเบราว์เซอร์</p>
-              <p>3. ไปที่ <b>File &gt; Import &gt; Upload</b> แล้วเลือกไฟล์ .csv ที่โหลดไป</p>
-              <p>4. ข้อมูลจะถูกจัดเรียงเป็นตารางให้คุณจัดการต่อได้ทันที!</p>
+            <h4 className="font-bold text-slate-800 flex items-center gap-2 mb-2"><Cloud className="w-4 h-4 text-blue-500" /> Google Ecosystem</h4>
+            <div className="text-sm text-slate-600 space-y-2 bg-blue-50 p-3 rounded-xl border border-blue-100">
+              <p>• <b>Direct Export:</b> ส่งข้อมูลเข้า Google Sheets ทันทีโดยไม่ต้องโหลดไฟล์</p>
+              <p>• <b>Drive Backup:</b> สำรองข้อมูลการเงินทั้งหมดไว้ใน Google Drive ส่วนตัว ปลอดภัยและเรียกคืนได้ทุกเมื่อ</p>
             </div>
           </section>
         </div>
@@ -52,13 +51,13 @@ export default function App() {
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'bill'>('dashboard');
   
-  // Data State - ผูกกับ UserId
   const [salary, setSalary] = useState<number>(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<HistoricalBudget[]>([]);
   
   const [selectedHistory, setSelectedHistory] = useState<HistoricalBudget | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
+  const [loadingCloud, setLoadingCloud] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -67,7 +66,10 @@ export default function App() {
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<ExpenseCategory>(ExpenseCategory.FOOD);
 
-  // Load User Data เมื่อ Login
+  useEffect(() => {
+    googleApiService.init();
+  }, []);
+
   useEffect(() => {
     if (user) {
       const savedSalary = localStorage.getItem(`salary_${user.id}`);
@@ -80,7 +82,6 @@ export default function App() {
     }
   }, [user]);
 
-  // Save Data เมื่อมีการเปลี่ยนแปลง
   useEffect(() => {
     if (user) {
       localStorage.setItem(`salary_${user.id}`, salary.toString());
@@ -92,10 +93,6 @@ export default function App() {
   const totalExpenses = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
   const balance = salary - totalExpenses;
 
-  const handleLoginSuccess = (loggedInUser: User) => {
-    setUser(loggedInUser);
-  };
-
   const handleLogout = () => {
     authService.logout();
     setUser(null);
@@ -103,6 +100,39 @@ export default function App() {
     setExpenses([]);
     setHistory([]);
     setActiveTab('dashboard');
+  };
+
+  const handleGoogleSheetsExport = async () => {
+    setLoadingCloud(true);
+    try {
+      const monthLabel = new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+      const sheetUrl = await googleApiService.exportToSheets({ salary, expenses }, monthLabel);
+      if (sheetUrl) {
+        if (confirm('ส่งออกข้อมูลสำเร็จ! คุณต้องการเปิด Google Sheets ตอนนี้เลยหรือไม่?')) {
+          window.open(sheetUrl, '_blank');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Google Sheets');
+    } finally {
+      setLoadingCloud(false);
+    }
+  };
+
+  const handleDriveBackup = async () => {
+    if (!user) return;
+    setLoadingCloud(true);
+    try {
+      const appData = { salary, expenses, history };
+      const success = await googleApiService.backupToDrive(user.id, appData);
+      if (success) alert('สำรองข้อมูลลง Google Drive สำเร็จ!');
+    } catch (err) {
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการสำรองข้อมูล');
+    } finally {
+      setLoadingCloud(false);
+    }
   };
 
   const addExpense = () => {
@@ -155,28 +185,8 @@ export default function App() {
     }
   };
 
-  const exportToCSV = (data: BudgetState, fileName: string) => {
-    const headers = ['วันที่', 'หมวดหมู่', 'รายละเอียด', 'จำนวนเงิน (บาท)'];
-    const rows = data.expenses.map(e => [e.date, e.category, e.description, e.amount.toString()]);
-    rows.push(['', '', '', '']);
-    rows.push(['', '', 'รายได้ทั้งหมด', data.salary.toString()]);
-    rows.push(['', '', 'ค่าใช้จ่ายทั้งหมด', data.expenses.reduce((sum, e) => sum + e.amount, 0).toString()]);
-    rows.push(['', '', 'คงเหลือสุทธิ', (data.salary - data.expenses.reduce((sum, e) => sum + e.amount, 0)).toString()]);
-
-    const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${fileName}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   if (!user) {
-    return <AuthOverlay onLoginSuccess={handleLoginSuccess} />;
+    return <AuthOverlay onLoginSuccess={(u) => setUser(u)} />;
   }
 
   return (
@@ -203,6 +213,8 @@ export default function App() {
               <button onClick={() => {setActiveTab('history'); setSelectedHistory(null)}} className={`px-5 py-2 rounded-full transition-all ${activeTab === 'history' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>ประวัติ</button>
             </div>
             
+            <button onClick={() => setIsHelpOpen(true)} className="p-2 text-slate-400 hover:text-indigo-600"><HelpCircle className="w-6 h-6" /></button>
+
             <div className="flex items-center gap-2 pl-4 border-l border-slate-100 ml-2">
               <div className="flex flex-col items-end mr-2 hidden sm:flex">
                 <span className="text-xs font-bold text-slate-800">{user.fullName}</span>
@@ -220,6 +232,27 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-6">
+              {/* Profile & Cloud Section */}
+              <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-[2.5rem] text-white shadow-xl shadow-indigo-100">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center font-black text-xl">{user.fullName[0]}</div>
+                  <div>
+                    <h3 className="font-bold leading-tight">{user.fullName}</h3>
+                    <p className="text-xs text-white/60">Cloud Connected</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <button 
+                    onClick={handleDriveBackup} 
+                    disabled={loadingCloud}
+                    className="flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-white/20 rounded-2xl text-xs font-bold transition-all border border-white/10"
+                  >
+                    {loadingCloud ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudUpload className="w-4 h-4" />}
+                    Backup to Google Drive
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">รายได้ต่อเดือน</label>
                 <div className="relative">
@@ -247,18 +280,15 @@ export default function App() {
                 {aiAnalysis ? (
                   <div className="space-y-4">
                     <p className="text-sm text-slate-300 italic border-l-4 border-indigo-500 pl-4 leading-relaxed">"{aiAnalysis.summary}"</p>
-                    <div className="pt-4 border-t border-white/10">
-                      <button onClick={handleAIAnalyze} disabled={loadingAI} className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition-all">{loadingAI ? 'กำลังวิเคราะห์...' : 'ขอคำแนะนำใหม่'}</button>
-                    </div>
+                    <button onClick={handleAIAnalyze} disabled={loadingAI} className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold">{loadingAI ? 'กำลังวิเคราะห์...' : 'ขอคำแนะนำใหม่'}</button>
                   </div>
                 ) : (
-                  <button onClick={handleAIAnalyze} disabled={loadingAI || expenses.length === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black shadow-xl shadow-indigo-500/20 transition-all">{loadingAI ? 'กำลังประมวลผล...' : 'วิเคราะห์พฤติกรรมการใช้เงิน'}</button>
+                  <button onClick={handleAIAnalyze} disabled={loadingAI || expenses.length === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-sm font-black shadow-xl shadow-indigo-500/20">{loadingAI ? 'กำลังวิเคราะห์...' : 'วิเคราะห์พฤติกรรมการเงิน'}</button>
                 )}
               </div>
 
               <div className="space-y-3">
-                <button onClick={() => setActiveTab('bill')} className="w-full flex items-center justify-center space-x-2 py-5 bg-slate-900 text-white rounded-[2rem] font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"><Receipt className="w-5 h-5" /><span>สรุปบิลรายเดือน</span></button>
-                <button onClick={saveToHistory} className="w-full flex items-center justify-center space-x-2 py-5 border-2 border-indigo-100 text-indigo-600 rounded-[2rem] font-black hover:bg-indigo-50 transition-all"><Save className="w-5 h-5" /><span>เก็บบันทึกลงประวัติ</span></button>
+                <button onClick={() => setActiveTab('bill')} className="w-full flex items-center justify-center space-x-2 py-5 bg-slate-900 text-white rounded-[2rem] font-black hover:bg-slate-800 shadow-xl shadow-slate-200"><Receipt className="w-5 h-5" /><span>สรุปบิลรายเดือน</span></button>
               </div>
             </div>
 
@@ -279,9 +309,9 @@ export default function App() {
                 </div>
                 <div className="flex gap-4">
                   <div className="flex-1 relative">
-                    <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="รายละเอียดสั้นๆ..." className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
+                    <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="รายละเอียด..." className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />
                   </div>
-                  <button onClick={addExpense} className="px-8 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-500 transition-all"><Plus className="w-8 h-8" /></button>
+                  <button onClick={addExpense} className="px-8 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-500"><Plus className="w-8 h-8" /></button>
                 </div>
               </div>
 
@@ -289,7 +319,7 @@ export default function App() {
                 {expenses.length === 0 ? (
                   <div className="text-center py-24 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-100">
                     <div className="inline-flex p-6 bg-slate-50 rounded-full text-slate-200 mb-4"><Receipt className="w-12 h-12" /></div>
-                    <p className="text-slate-400 text-sm font-bold">ยังไม่มีรายการค่าใช้จ่ายในเดือนนี้</p>
+                    <p className="text-slate-400 text-sm font-bold">ยังไม่มีรายการค่าใช้จ่าย</p>
                   </div>
                 ) : (
                   expenses.map(exp => <ExpenseItem key={exp.id} expense={exp} onDelete={deleteExpense} />)
@@ -303,9 +333,16 @@ export default function App() {
           <div className="space-y-8 animate-in fade-in duration-500">
             <BillReceipt state={{ salary, expenses }} />
             <div className="flex flex-wrap justify-center gap-4 no-print pb-10">
-              <button onClick={() => setActiveTab('dashboard')} className="px-8 py-4 bg-white border border-slate-200 rounded-2xl font-black text-slate-600 hover:bg-slate-50 shadow-sm transition-all">ย้อนกลับ</button>
+              <button onClick={() => setActiveTab('dashboard')} className="px-8 py-4 bg-white border border-slate-200 rounded-2xl font-black text-slate-600 hover:bg-slate-50">ย้อนกลับ</button>
+              <button 
+                onClick={handleGoogleSheetsExport} 
+                disabled={loadingCloud}
+                className="flex items-center space-x-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black hover:bg-emerald-700 shadow-xl shadow-emerald-100 disabled:opacity-70 transition-all"
+              >
+                {loadingCloud ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileSpreadsheet className="w-5 h-5" />}
+                <span>บันทึกลง Google Sheets</span>
+              </button>
               <button onClick={() => setIsQRModalOpen(true)} className="flex items-center space-x-2 px-8 py-4 bg-orange-500 text-white rounded-2xl font-black hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all"><QrCode className="w-5 h-5" /><span>สร้าง QR รับเงิน</span></button>
-              <button onClick={() => exportToCSV({salary, expenses}, `Budget_${new Date().toLocaleDateString('th-TH')}`)} className="flex items-center space-x-2 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black hover:bg-emerald-700 shadow-xl shadow-emerald-100 transition-all"><FileSpreadsheet className="w-5 h-5" /><span>Excel Export</span></button>
               <button onClick={() => window.print()} className="flex items-center space-x-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all"><Download className="w-5 h-5" /><span>บันทึก PDF</span></button>
             </div>
           </div>
@@ -313,40 +350,32 @@ export default function App() {
 
         {activeTab === 'history' && (
           <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-3xl font-black text-slate-800 flex items-center space-x-4 tracking-tight"><div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600"><HistoryIcon className="w-8 h-8" /></div><span>ประวัติการใช้จ่ายของคุณ</span></h2>
+            <h2 className="text-3xl font-black text-slate-800 flex items-center space-x-4 tracking-tight"><div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600"><HistoryIcon className="w-8 h-8" /></div><span>ประวัติการใช้จ่าย</span></h2>
             {selectedHistory ? (
               <div className="space-y-8">
-                <button onClick={() => setSelectedHistory(null)} className="flex items-center space-x-2 text-indigo-600 font-black mb-6 hover:gap-3 transition-all"><ArrowRight className="w-5 h-5 rotate-180" /><span>กลับไปยังหน้ารายการ</span></button>
+                <button onClick={() => setSelectedHistory(null)} className="flex items-center space-x-2 text-indigo-600 font-black mb-6 hover:gap-3"><ArrowRight className="w-5 h-5 rotate-180" /><span>ย้อนกลับ</span></button>
                 <BillReceipt state={{ salary: selectedHistory.salary, expenses: selectedHistory.expenses }} />
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {history.length === 0 ? (
-                  <div className="col-span-full py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
-                    <div className="inline-flex p-8 bg-slate-50 rounded-full text-slate-200 mb-4"><Table className="w-12 h-12" /></div>
-                    <p className="text-slate-400 font-black italic">คุณยังไม่เคยบันทึกประวัติ</p>
-                  </div>
-                ) : (
-                  history.map(h => (
-                    <div key={h.id} onClick={() => setSelectedHistory(h)} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl transition-all cursor-pointer group relative overflow-hidden">
-                      <div className="absolute -top-4 -right-4 w-24 h-24 bg-indigo-50 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
-                      <div className="flex items-center space-x-4 mb-6 relative z-10">
-                        <div className="p-4 bg-indigo-50 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300"><Table className="w-6 h-6" /></div>
-                        <div>
-                          <h4 className="font-black text-slate-800 text-lg leading-tight">{h.monthName}</h4>
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">{new Date(h.savedAt).toLocaleDateString('th-TH')}</p>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-end relative z-10">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-black uppercase mb-1">คงเหลือ</p>
-                          <p className="text-xl font-black text-slate-800">฿{(h.salary - h.expenses.reduce((sum, e) => sum + e.amount, 0)).toLocaleString()}</p>
-                        </div>
-                        <button onClick={(e) => deleteHistory(h.id, e)} className="p-3 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
+                {history.map(h => (
+                  <div key={h.id} onClick={() => setSelectedHistory(h)} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl transition-all cursor-pointer group relative overflow-hidden">
+                    <div className="flex items-center space-x-4 mb-6">
+                      <div className="p-4 bg-indigo-50 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all"><Table className="w-6 h-6" /></div>
+                      <div>
+                        <h4 className="font-black text-slate-800 text-lg leading-tight">{h.monthName}</h4>
+                        <p className="text-[10px] text-slate-400 font-black uppercase mt-1">{new Date(h.savedAt).toLocaleDateString('th-TH')}</p>
                       </div>
                     </div>
-                  ))
-                )}
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-black uppercase mb-1">คงเหลือ</p>
+                        <p className="text-xl font-black text-slate-800">฿{(h.salary - h.expenses.reduce((sum, e) => sum + e.amount, 0)).toLocaleString()}</p>
+                      </div>
+                      <button onClick={(e) => deleteHistory(h.id, e)} className="p-3 text-slate-200 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
