@@ -2,9 +2,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { BudgetState, AIAnalysisResponse, ExpenseCategory } from "../types.ts";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
 export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisResponse> => {
+  // สร้าง instance ใหม่ทุกครั้งที่เรียกใช้เพื่อให้มั่นใจว่าได้ API Key ล่าสุด
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
   const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0);
   const remaining = state.salary - totalExpenses;
   
@@ -46,21 +47,33 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
       }
     });
 
-    const result = JSON.parse(response.text || '{}');
+    if (!response.text) {
+      throw new Error("Empty response from AI");
+    }
+
+    const result = JSON.parse(response.text.trim());
     return result as AIAnalysisResponse;
   } catch (error) {
     console.error("AI Analysis Error:", error);
+    // กรณีเกิดข้อผิดพลาด ให้ส่งค่าที่ช่วยให้ผู้ใช้ทราบว่าควรทำอย่างไร
     return {
-      summary: "ไม่สามารถวิเคราะห์ข้อมูลได้ในขณะนี้",
-      suggestions: ["โปรดลองใหม่อีกครั้ง", "ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"],
+      summary: "ขออภัย ระบบวิเคราะห์ขัดข้องชั่วคราว",
+      suggestions: [
+        "ตรวจสอบว่าคุณได้เพิ่มรายการค่าใช้จ่ายเพียงพอหรือไม่",
+        "ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ",
+        "หากยังพบปัญหา โปรดลองใหม่อีกครั้งในภายหลัง"
+      ],
       status: 'warning'
     };
   }
 };
 
 export const parseExpenseText = async (text: string): Promise<{ amount: number; category: ExpenseCategory; description: string } | null> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
   const prompt = `วิเคราะห์ข้อความต่อไปนี้และแยกข้อมูลรายจ่าย: "${text}" 
-  ให้คืนค่าเป็นหมวดหมู่ที่เหมาะสมที่สุดจากรายการ: ${Object.values(ExpenseCategory).join(', ')}`;
+  ให้คืนค่าเป็นหมวดหมู่ที่เหมาะสมที่สุดจากรายการหมวดหมู่ที่มีอยู่
+  รายการหมวดหมู่: ${Object.values(ExpenseCategory).join(', ')}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -71,16 +84,17 @@ export const parseExpenseText = async (text: string): Promise<{ amount: number; 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            amount: { type: Type.NUMBER, description: "จำนวนเงินที่ระบุ" },
-            category: { type: Type.STRING, enum: Object.values(ExpenseCategory), description: "หมวดหมู่รายจ่าย" },
-            description: { type: Type.STRING, description: "รายละเอียดสั้นๆ" }
+            amount: { type: Type.NUMBER, description: "จำนวนเงินที่ระบุในข้อความ" },
+            category: { type: Type.STRING, enum: Object.values(ExpenseCategory), description: "หมวดหมู่รายจ่ายที่ตรงที่สุด" },
+            description: { type: Type.STRING, description: "รายละเอียดสั้นๆ ของรายการ" }
           },
           required: ["amount", "category", "description"]
         }
       }
     });
 
-    return JSON.parse(response.text || '{}');
+    if (!response.text) return null;
+    return JSON.parse(response.text.trim());
   } catch (error) {
     console.error("AI Parse Error:", error);
     return null;
