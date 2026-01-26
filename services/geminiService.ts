@@ -3,15 +3,19 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { BudgetState, AIAnalysisResponse, ExpenseCategory } from "../types.ts";
 
 export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisResponse> => {
-  // สร้าง instance โดยใช้ API Key จาก environment ตรงๆ ตามข้อกำหนด
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // สร้าง instance ทุกครั้งเพื่อดึง Key ที่ถูกต้องที่สุด
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const totalExpenses = state.expenses.reduce((sum, e) => sum + e.amount, 0);
   const remaining = state.salary - totalExpenses;
   
-  // จำกัดข้อมูลส่งไปเพื่อป้องกัน Error จากขนาด Payload
   const expenseSummary = state.expenses
-    .slice(0, 20)
+    .slice(0, 15)
     .map(e => `${e.category}: ${e.amount} (${e.description})`)
     .join(', ');
 
@@ -26,24 +30,20 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
-        // ตั้งค่า thinkingBudget เป็น 0 เพื่อเน้นความเร็วและความแม่นยำของ JSON Schema
-        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            summary: { type: Type.STRING, description: "สรุปภาพรวมสั้นๆ" },
+            summary: { type: Type.STRING },
             suggestions: { 
               type: Type.ARRAY, 
-              items: { type: Type.STRING },
-              description: "คำแนะนำ 3 ข้อ"
+              items: { type: Type.STRING }
             },
             status: { 
               type: Type.STRING, 
-              enum: ['good', 'warning', 'critical'],
-              description: "ระดับความปลอดภัยทางการเงิน"
+              enum: ['good', 'warning', 'critical']
             }
           },
           required: ["summary", "suggestions", "status"]
@@ -52,47 +52,30 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
     });
 
     const text = response.text;
-    if (!text) throw new Error("AI ไม่ได้ส่งข้อมูลตอบกลับมา");
+    if (!text) throw new Error("EMPTY_RESPONSE");
 
     return JSON.parse(text.trim()) as AIAnalysisResponse;
 
   } catch (error: any) {
-    console.error("Critical AI Error:", error);
-    
-    // ตรวจสอบประเภทข้อผิดพลาดเพื่อแสดงข้อความที่เหมาะสม
-    let errorMessage = "การเชื่อมต่อ AI ขัดข้อง";
-    if (error.message?.includes("API_KEY")) {
-      errorMessage = "ระบบ API Key ยังไม่พร้อมใช้งาน";
-    } else if (error.message?.includes("quota")) {
-      errorMessage = "โควต้าการใช้งาน AI เต็มชั่วคราว";
-    } else if (error.message) {
-      errorMessage = `เกิดข้อผิดพลาด: ${error.message.substring(0, 60)}`;
-    }
-
-    return {
-      summary: errorMessage,
-      suggestions: [
-        "ตรวจสอบยอดรายได้และรายจ่ายว่าถูกต้องหรือไม่",
-        "ลองกด 'วิเคราะห์ใหม่อีกครั้ง' ในอีกสักครู่",
-        "ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ"
-      ],
-      status: 'warning'
-    };
+    console.error("Gemini Analysis Error:", error);
+    throw error; // ส่งต่อให้ App.tsx จัดการ UI
   }
 };
 
 export const parseExpenseText = async (text: string): Promise<{ amount: number; category: ExpenseCategory; description: string } | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return null;
+
+  const ai = new GoogleGenAI({ apiKey });
   
-  const prompt = `Extract expense info from this Thai sentence: "${text}". Available categories: ${Object.values(ExpenseCategory).join(',')}`;
+  const prompt = `Extract expense from: "${text}". Categories: ${Object.values(ExpenseCategory).join(',')}`;
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
