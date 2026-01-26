@@ -4,13 +4,15 @@ import {
   Plus, Wallet, Receipt, TrendingDown, TrendingUp, Download, Sparkles, ArrowRight, Share, X, 
   History as HistoryIcon, Table, Trash2, Save, FileSpreadsheet, HelpCircle, Smartphone, Info, 
   QrCode, LogOut, User as UserIcon, Cloud, CloudUpload, ExternalLink, Loader2, RefreshCw,
-  AlertCircle, CheckCircle2, ShieldAlert, Settings, ShieldCheck, Users, Activity, ChevronLeft, Calendar
+  AlertCircle, CheckCircle2, ShieldAlert, Settings, ShieldCheck, Users, Activity, ChevronLeft, Calendar,
+  Calculator as CalcIcon
 } from 'lucide-react';
 import { User, Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types.ts';
 import { ExpenseItem } from './components/ExpenseItem.tsx';
 import { BillReceipt } from './components/BillReceipt.tsx';
 import { analyzeBudget } from './services/geminiService.ts';
 import { QRCodeModal } from './components/QRCodeModal.tsx';
+import { Calculator } from './components/Calculator.tsx';
 import { AuthOverlay } from './components/AuthOverlay.tsx';
 import { authService } from './services/authService.ts';
 import { googleApiService } from './services/googleApiService.ts';
@@ -36,13 +38,13 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<ExpenseCategory>(ExpenseCategory.FOOD);
 
   useEffect(() => {
-    // Safety Timeout: หากผ่านไป 3 วินาทียังโหลดไม่เสร็จ ให้ปลดล็อคหน้าจอเอง
     const timer = setTimeout(() => {
       setIsInitializing(false);
     }, 3000);
@@ -60,7 +62,6 @@ export default function App() {
     };
     
     checkAuth();
-    // โหลด Google API แบบเงียบๆ ไม่ต้องรอ
     googleApiService.init().catch(console.warn);
     
     return () => clearTimeout(timer);
@@ -72,7 +73,6 @@ export default function App() {
     }
   }, [user]);
 
-  // Load Admin Data when entering Admin Tab
   useEffect(() => {
     if (activeTab === 'admin' && user?.role === 'admin') {
       loadAdminData();
@@ -230,6 +230,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       <QRCodeModal isOpen={isQRModalOpen} onClose={() => setIsQRModalOpen(false)} amount={activeTab === 'bill' ? balance : 0} />
+      <Calculator isOpen={isCalculatorOpen} onClose={() => setIsCalculatorOpen(false)} onApply={(val) => setAmount(val)} />
       
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -358,8 +359,19 @@ export default function App() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">จำนวนเงิน (บาท)</label>
-                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-lg focus:ring-2 focus:ring-indigo-500 transition-all" />
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                      <span>จำนวนเงิน (บาท)</span>
+                      <button 
+                        onClick={() => setIsCalculatorOpen(true)}
+                        className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                      >
+                        <CalcIcon className="w-3.5 h-3.5" />
+                        <span className="text-[9px]">เปิดเครื่องคิดเลข</span>
+                      </button>
+                    </label>
+                    <div className="relative">
+                      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-lg focus:ring-2 focus:ring-indigo-500 transition-all" />
+                    </div>
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
