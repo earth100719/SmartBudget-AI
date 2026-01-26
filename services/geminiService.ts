@@ -2,12 +2,29 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { BudgetState, AIAnalysisResponse, ExpenseCategory } from "../types.ts";
 
-export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisResponse> => {
-  // สร้าง instance ทุกครั้งเพื่อดึง Key ที่ถูกต้องที่สุด
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY_MISSING");
+/**
+ * ฟังก์ชันช่วยล้างข้อความให้เป็น JSON ที่สะอาด
+ * ป้องกันกรณี AI ตอบกลับมาพร้อมกับ Markdown หรือคำอธิบายหน้า-หลัง
+ */
+const cleanAndParseJSON = (text: string) => {
+  try {
+    // พยายามค้นหาตำแหน่งของ { และ } เพื่อตัดส่วนเกิน
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+      const jsonStr = text.substring(start, end + 1);
+      return JSON.parse(jsonStr);
+    }
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("JSON Parse Error. Raw text:", text);
+    throw new Error("ระบบไม่สามารถประมวลผลรูปแบบข้อมูลจาก AI ได้");
   }
+};
+
+export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisResponse> => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("ไม่พบ API KEY กรุณาตรวจสอบการตั้งค่า");
 
   const ai = new GoogleGenAI({ apiKey });
   
@@ -23,9 +40,9 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
     รายได้: ${state.salary} บาท
     ค่าใช้จ่ายรวม: ${totalExpenses} บาท
     เงินคงเหลือ: ${remaining} บาท
-    รายการใช้จ่ายหลัก: ${expenseSummary}
+    รายการใช้จ่ายล่าสุด: ${expenseSummary}
     
-    โปรดสรุปสถานะการเงินและให้คำแนะนำ 3 ข้อ โดยตอบกลับเป็นรูปแบบ JSON ตามโครงสร้างที่กำหนดเท่านั้น`;
+    โปรดสรุปสถานะการเงินและให้คำแนะนำ 3 ข้อ โดยตอบกลับเป็นรูปแบบ JSON (summary: string, suggestions: string[], status: 'good'|'warning'|'critical')`;
 
   try {
     const response = await ai.models.generateContent({
@@ -37,28 +54,18 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
           type: Type.OBJECT,
           properties: {
             summary: { type: Type.STRING },
-            suggestions: { 
-              type: Type.ARRAY, 
-              items: { type: Type.STRING }
-            },
-            status: { 
-              type: Type.STRING, 
-              enum: ['good', 'warning', 'critical']
-            }
+            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            status: { type: Type.STRING, enum: ['good', 'warning', 'critical'] }
           },
           required: ["summary", "suggestions", "status"]
         }
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("EMPTY_RESPONSE");
-
-    return JSON.parse(text.trim()) as AIAnalysisResponse;
-
+    return cleanAndParseJSON(response.text);
   } catch (error: any) {
-    console.error("Gemini Analysis Error:", error);
-    throw error; // ส่งต่อให้ App.tsx จัดการ UI
+    console.error("Analysis Error:", error);
+    throw error;
   }
 };
 
@@ -68,7 +75,14 @@ export const parseExpenseText = async (text: string): Promise<{ amount: number; 
 
   const ai = new GoogleGenAI({ apiKey });
   
-  const prompt = `Extract expense from: "${text}". Categories: ${Object.values(ExpenseCategory).join(',')}`;
+  const prompt = `จงสกัดข้อมูลค่าใช้จ่ายจากข้อความนี้: "${text}"
+    โดยเลือกหมวดหมู่ที่เหมาะสมที่สุดจากรายการนี้เท่านั้น: ${Object.values(ExpenseCategory).join(', ')}
+    ส่งกลับเป็น JSON เท่านั้น:
+    {
+      "amount": (ตัวเลขยอดเงินเท่านั้น),
+      "category": (ชื่อหมวดหมู่ที่เลือกจากรายการข้างต้น),
+      "description": (ชื่อรายการสั้นๆ)
+    }`;
 
   try {
     const response = await ai.models.generateContent({
@@ -88,10 +102,9 @@ export const parseExpenseText = async (text: string): Promise<{ amount: number; 
       }
     });
 
-    const result = response.text;
-    return result ? JSON.parse(result.trim()) : null;
+    return cleanAndParseJSON(response.text);
   } catch (error) {
-    console.error("Parse Error:", error);
+    console.error("Smart Parse Error:", error);
     return null;
   }
 };
