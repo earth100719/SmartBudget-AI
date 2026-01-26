@@ -5,13 +5,40 @@ const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googlea
 let tokenClient: any = null;
 let accessToken: string | null = null;
 
+/**
+ * Helper to wait for the global 'google' object from Identity Services to be available.
+ */
+const waitForGoogle = (): Promise<any> => {
+  return new Promise((resolve) => {
+    if ((window as any).google) {
+      return resolve((window as any).google);
+    }
+    const interval = setInterval(() => {
+      if ((window as any).google) {
+        clearInterval(interval);
+        resolve((window as any).google);
+      }
+    }, 100);
+    // Timeout after 10 seconds to prevent infinite wait
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve(null);
+    }, 10000);
+  });
+};
+
 export const googleApiService = {
   // เริ่มต้น OAuth2 Client
-  init: () => {
+  init: async () => {
+    const google = await waitForGoogle();
+    if (!google) {
+      console.warn('Google Identity Services library not loaded.');
+      return null;
+    }
+
     return new Promise((resolve) => {
-      // @ts-ignore
       tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com', // ในระบบนี้จะใช้สิทธิ์ผ่าน Proxy หรือผู้ใช้ต้องระบุ แต่เราจะใช้ flow ของ fetch เป็นหลัก
+        client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
         scope: SCOPES,
         callback: (response: any) => {
           if (response.error !== undefined) {
@@ -21,7 +48,7 @@ export const googleApiService = {
           resolve(accessToken);
         },
       });
-      resolve(null);
+      resolve(tokenClient);
     });
   },
 
@@ -32,7 +59,6 @@ export const googleApiService = {
         reject('Google Client not initialized');
         return;
       }
-      // @ts-ignore
       tokenClient.callback = (response: any) => {
         if (response.error) {
           reject(response);
