@@ -42,6 +42,11 @@ export default function App() {
   const [category, setCategory] = useState<ExpenseCategory>(ExpenseCategory.FOOD);
 
   useEffect(() => {
+    // Safety Timeout: หากผ่านไป 3 วินาทียังโหลดไม่เสร็จ ให้ปลดล็อคหน้าจอเอง
+    const timer = setTimeout(() => {
+      setIsInitializing(false);
+    }, 3000);
+
     const checkAuth = async () => {
       try {
         const currentUser = await authService.getCurrentUser();
@@ -50,10 +55,15 @@ export default function App() {
         console.error("Auth check failed", e);
       } finally {
         setIsInitializing(false);
+        clearTimeout(timer);
       }
     };
+    
     checkAuth();
-    googleApiService.init();
+    // โหลด Google API แบบเงียบๆ ไม่ต้องรอ
+    googleApiService.init().catch(console.warn);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -67,7 +77,7 @@ export default function App() {
     if (activeTab === 'admin' && user?.role === 'admin') {
       loadAdminData();
     }
-  }, [activeTab, adminView]);
+  }, [activeTab, adminView, user?.role]);
 
   const loadAdminData = async () => {
     setLoadingAdmin(true);
@@ -94,9 +104,9 @@ export default function App() {
     setLoadingData(true);
     try {
       const [profile, cloudExpenses, cloudHistory] = await Promise.all([
-        dataService.fetchProfile(user.id),
-        dataService.fetchExpenses(user.id),
-        dataService.fetchHistory(user.id)
+        dataService.fetchProfile(user.id).catch(() => null),
+        dataService.fetchExpenses(user.id).catch(() => []),
+        dataService.fetchHistory(user.id).catch(() => [])
       ]);
 
       if (profile) setSalary(profile.salary);
@@ -207,7 +217,8 @@ export default function App() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
         <Loader2 className="w-12 h-12 animate-spin text-indigo-500 mb-4" />
-        <p className="font-bold tracking-widest text-sm animate-pulse uppercase">Syncing with Cloud...</p>
+        <p className="font-bold tracking-widest text-sm animate-pulse uppercase italic">SmartBudget is starting...</p>
+        <p className="text-[10px] text-slate-500 mt-2">Checking cloud connection...</p>
       </div>
     );
   }
@@ -473,8 +484,8 @@ export default function App() {
                       ) : (
                         allUsers.map(u => (
                           <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-8 py-5 flex items-center gap-3 font-mono text-xs">
-                              <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center font-bold text-[10px]">{u.id.substring(0,2)}</div>
+                            <td className="px-8 py-5 flex items-center gap-3 font-mono text-xs text-slate-500">
+                              <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center font-bold text-[10px] text-slate-400">{u.id.substring(0,2)}</div>
                               {u.id}
                             </td>
                             <td className="px-8 py-5 font-black text-slate-700">฿{u.salary?.toLocaleString() || 0}</td>
@@ -525,7 +536,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ... History & Bill Tabs (Keep same as before) ... */}
         {activeTab === 'bill' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             <BillReceipt state={{ salary, expenses }} />
