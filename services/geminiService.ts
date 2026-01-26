@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { BudgetState, AIAnalysisResponse } from "../types.ts";
+import { BudgetState, AIAnalysisResponse, ExpenseCategory } from "../types.ts";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
@@ -55,5 +55,34 @@ export const analyzeBudget = async (state: BudgetState): Promise<AIAnalysisRespo
       suggestions: ["โปรดลองใหม่อีกครั้ง", "ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"],
       status: 'warning'
     };
+  }
+};
+
+export const parseExpenseText = async (text: string): Promise<{ amount: number; category: ExpenseCategory; description: string } | null> => {
+  const prompt = `วิเคราะห์ข้อความต่อไปนี้และแยกข้อมูลรายจ่าย: "${text}" 
+  ให้คืนค่าเป็นหมวดหมู่ที่เหมาะสมที่สุดจากรายการ: ${Object.values(ExpenseCategory).join(', ')}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            amount: { type: Type.NUMBER, description: "จำนวนเงินที่ระบุ" },
+            category: { type: Type.STRING, enum: Object.values(ExpenseCategory), description: "หมวดหมู่รายจ่าย" },
+            description: { type: Type.STRING, description: "รายละเอียดสั้นๆ" }
+          },
+          required: ["amount", "category", "description"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    console.error("AI Parse Error:", error);
+    return null;
   }
 };

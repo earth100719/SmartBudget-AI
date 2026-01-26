@@ -5,12 +5,13 @@ import {
   History as HistoryIcon, Table, Trash2, Save, FileSpreadsheet, HelpCircle, Smartphone, Info, 
   QrCode, LogOut, User as UserIcon, Cloud, CloudUpload, ExternalLink, Loader2, RefreshCw,
   AlertCircle, CheckCircle2, ShieldAlert, Settings, ShieldCheck, Users, Activity, ChevronLeft, Calendar,
-  Calculator as CalcIcon
+  Calculator as CalcIcon, Wand2
 } from 'lucide-react';
 import { User, Expense, ExpenseCategory, BudgetState, AIAnalysisResponse, HistoricalBudget } from './types.ts';
 import { ExpenseItem } from './components/ExpenseItem.tsx';
 import { BillReceipt } from './components/BillReceipt.tsx';
-import { analyzeBudget } from './services/geminiService.ts';
+import { analyzeBudget, parseExpenseText } from './services/geminiService.ts';
+import { SpendingCharts } from './components/SpendingCharts.tsx';
 import { QRCodeModal } from './components/QRCodeModal.tsx';
 import { Calculator } from './components/Calculator.tsx';
 import { AuthOverlay } from './components/AuthOverlay.tsx';
@@ -35,6 +36,7 @@ export default function App() {
   const [loadingAdmin, setLoadingAdmin] = useState(false);
 
   const [loadingAI, setLoadingAI] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResponse | null>(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -146,6 +148,28 @@ export default function App() {
       console.error("AI Error", err);
     } finally {
       setLoadingAI(false);
+    }
+  };
+
+  const handleSmartParse = async () => {
+    if (!desc.trim()) {
+      alert("กรุณาพิมพ์รายละเอียดก่อน เช่น 'ข้าวเที่ยง 120' แล้วกดปุ่มนี้");
+      return;
+    }
+    setIsParsing(true);
+    try {
+      const result = await parseExpenseText(desc);
+      if (result) {
+        setAmount(result.amount.toString());
+        setCategory(result.category);
+        setDesc(result.description);
+      } else {
+        alert("ขออภัย AI ไม่สามารถสรุปข้อความนี้ได้ โปรดระบุข้อมูลเอง");
+      }
+    } catch (err) {
+      console.error("Parse Error", err);
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -302,6 +326,8 @@ export default function App() {
                 </div>
               </div>
 
+              <SpendingCharts expenses={expenses} />
+
               <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 rounded-[2.5rem] shadow-xl text-white relative overflow-hidden group">
                 <Sparkles className="absolute top-4 right-4 w-12 h-12 opacity-10 group-hover:scale-125 transition-transform" />
                 <h3 className="text-lg font-black mb-4 flex items-center gap-2">AI ประมวลผล <Sparkles className="w-4 h-4 text-yellow-300" /></h3>
@@ -351,6 +377,32 @@ export default function App() {
                   <div className="w-3 h-8 bg-indigo-600 rounded-full"></div>
                   <span>บันทึกรายการ</span>
                 </h3>
+                
+                {/* AI Smart Parser Input */}
+                <div className="mb-6 group">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                    <span>AI Smart Parser (พิมพ์ประโยคเดียวจบ)</span>
+                    <span className="text-[9px] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded font-bold">New ✨</span>
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={desc} 
+                      onChange={(e) => setDesc(e.target.value)} 
+                      placeholder="เช่น 'จ่ายค่าไฟ 1500', 'ข้าวแกง 50 บาท', 'ผ่อนรถ 8500'..." 
+                      className="w-full pl-5 pr-14 py-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500 transition-all" 
+                    />
+                    <button 
+                      onClick={handleSmartParse}
+                      disabled={isParsing || !desc}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all active:scale-90 disabled:opacity-50"
+                      title="ให้ AI แยกข้อมูลให้"
+                    >
+                      {isParsing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">หมวดหมู่</label>
@@ -374,10 +426,10 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="ระบุรายละเอียด เช่น ค่าไฟบ้าน, ข้าวเที่ยง..." className="flex-1 px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500 transition-all" />
-                  <button onClick={addExpense} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-500 shadow-lg shadow-indigo-100 flex items-center justify-center transition-all active:scale-95"><Plus className="w-8 h-8" /></button>
-                </div>
+                
+                <button onClick={addExpense} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black hover:bg-indigo-500 shadow-xl shadow-indigo-100 flex items-center justify-center gap-3 transition-all active:scale-95">
+                  <Plus className="w-6 h-6" /> บันทึกรายการลงฐานข้อมูล
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -400,6 +452,7 @@ export default function App() {
           </div>
         )}
 
+        {/* ... Rest of the tabs (admin, bill, history) ... */}
         {activeTab === 'admin' && user.role === 'admin' && (
           <div className="space-y-8 animate-in slide-in-from-right-8 duration-500">
             {/* Admin Header */}
